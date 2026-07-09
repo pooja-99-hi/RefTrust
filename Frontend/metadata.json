@@ -1,0 +1,6 @@
+{
+  "name": "RefTrust Escrow",
+  "description": "A self-custodial multi-sig tournament escrow settling automatically when team captains sign, powered by Tether WDK and QVAC.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

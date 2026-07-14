@@ -74,27 +74,27 @@ export default function CreateSection({
       ]);
     }
 
-    const newCode = `REF-${Math.floor(1000 + Math.random() * 9000)}`;
-    const result: Tournament = {
-      id: Math.random().toString(36).substring(7),
-      name,
-      code: newCode,
-      captain1: { name: cap1Name, address: cap1Address, score: null, opponentScore: null, signed: false },
-      captain2: { name: cap2Name, address: cap2Address, score: null, opponentScore: null, signed: false },
-      escrow: {
-        contractAddress: '0x8Fb4726c5df962da42e3a53e48102381bc5ef3ea',
-        entryFee: fee,
-        totalPool: fee * 2,
-        currency: 'USDT',
-        status: 'LOCKED',
-        winnerAddress: null,
-        txHash: '0x7e1a384f67c29548483b5190a6e0c609c0f99bc7b2b07e774c8bc23cf9e9c32f'
-      },
-      createdAt: new Date().toLocaleString()
-    };
-
-    setDeployedTournament(result);
-    setIsDeploying(false);
+    try {
+      const response = await fetch('/api/tournaments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name,
+          entryFee: fee,
+          captain1Name: cap1Name,
+          captain1Address: cap1Address,
+          captain2Name: cap2Name,
+          captain2Address: cap2Address
+        })
+      });
+      if (!response.ok) throw new Error('Failed to deploy tournament escrow contract');
+      const result: Tournament = await response.json();
+      setDeployedTournament(result);
+    } catch (err: any) {
+      alert(err.message || 'Error deploying escrow');
+    } finally {
+      setIsDeploying(false);
+    }
   };
 
   const copyCode = () => {

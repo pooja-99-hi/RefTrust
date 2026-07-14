@@ -21,6 +21,14 @@ export interface EscrowDetails {
   txHash: string | null;
 }
 
+export interface DisputeResolutionDetails {
+  resolvedAt: string;
+  geminiAnalysis: string;
+  suggestedWinner: string;
+  confidence: number;
+  isSimulated?: boolean;
+}
+
 export interface Tournament {
   id: string;
   name: string;
@@ -29,6 +37,7 @@ export interface Tournament {
   captain2: Captain;
   escrow: EscrowDetails;
   createdAt: string;
+  disputeResolution?: DisputeResolutionDetails;
 }
 
 export interface LogEntry {

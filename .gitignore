@@ -1,0 +1,14 @@
+# Dependencies
+node_modules/
+Frontend/node_modules/
+dist/
+Frontend/dist/
+
+# Local Env
+.env
+.env.local
+Frontend/.env
+Frontend/.env.local
+
+# Database updates
+Frontend/data/tournaments.json

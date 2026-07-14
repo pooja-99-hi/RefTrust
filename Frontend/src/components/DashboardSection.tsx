@@ -61,6 +61,11 @@ export default function DashboardSection({
   const [copiedContract, setCopiedContract] = useState(false);
   const [disputeResolved, setDisputeResolved] = useState(false);
 
+  // Gemini dispute states
+  const [evidenceFile, setEvidenceFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [isGeminiArbitrating, setIsGeminiArbitrating] = useState<boolean>(false);
+
   if (!activeTournament) {
     return (
       <div className="w-full max-w-7xl px-4 py-16 text-center text-zinc-500 font-mono">
@@ -79,6 +84,8 @@ export default function DashboardSection({
     setVerificationResult(null);
     setIsVerifying(false);
     setDisputeResolved(false);
+    setEvidenceFile(null);
+    setPreviewUrl(null);
   };
 
   const copyContract = () => {
@@ -87,8 +94,16 @@ export default function DashboardSection({
     setTimeout(() => setCopiedContract(false), 2000);
   };
 
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setEvidenceFile(file);
+      setPreviewUrl(URL.createObjectURL(file));
+    }
+  };
+
   // Captain 1 Signs
-  const handleCap1Sign = (e: React.FormEvent) => {
+  const handleCap1Sign = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!walletConnected) {
       alert('Please connect your wallet to authorize contract!');
@@ -96,24 +111,26 @@ export default function DashboardSection({
     }
     if (cap1MyScore === '' || cap1OpScore === '') return;
 
-    setTournaments(prev => prev.map(t => {
-      if (t.id === activeTournament.id) {
-        return {
-          ...t,
-          captain1: {
-            ...t.captain1,
-            score: Number(cap1MyScore),
-            opponentScore: Number(cap1OpScore),
-            signed: true
-          }
-        };
-      }
-      return t;
-    }));
+    try {
+      const response = await fetch(`/api/tournaments/${activeTournament.id}/sign`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          captainIndex: 1,
+          score: Number(cap1MyScore),
+          opponentScore: Number(cap1OpScore)
+        })
+      });
+      if (!response.ok) throw new Error('Failed to sign match outcomes');
+      const updatedTournament = await response.json();
+      setTournaments(prev => prev.map(t => t.id === updatedTournament.id ? updatedTournament : t));
+    } catch (err: any) {
+      alert(err.message || 'Error signing escrow');
+    }
   };
 
   // Captain 2 Signs
-  const handleCap2Sign = (e: React.FormEvent) => {
+  const handleCap2Sign = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!walletConnected) {
       alert('Please connect your wallet to authorize contract!');
@@ -121,20 +138,22 @@ export default function DashboardSection({
     }
     if (cap2MyScore === '' || cap2OpScore === '') return;
 
-    setTournaments(prev => prev.map(t => {
-      if (t.id === activeTournament.id) {
-        return {
-          ...t,
-          captain2: {
-            ...t.captain2,
-            score: Number(cap2MyScore),
-            opponentScore: Number(cap2OpScore),
-            signed: true
-          }
-        };
-      }
-      return t;
-    }));
+    try {
+      const response = await fetch(`/api/tournaments/${activeTournament.id}/sign`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          captainIndex: 2,
+          score: Number(cap2MyScore),
+          opponentScore: Number(cap2OpScore)
+        })
+      });
+      if (!response.ok) throw new Error('Failed to sign match outcomes');
+      const updatedTournament = await response.json();
+      setTournaments(prev => prev.map(t => t.id === updatedTournament.id ? updatedTournament : t));
+    } catch (err: any) {
+      alert(err.message || 'Error signing escrow');
+    }
   };
 
   const triggerConfettiCelebration = () => {
@@ -172,112 +191,107 @@ export default function DashboardSection({
     // Simulated scanning delay
     await new Promise(resolve => setTimeout(resolve, 2500));
 
-    const cap1 = activeTournament.captain1;
-    const cap2 = activeTournament.captain2;
-
-    // Check if score aligns:
-    // Alice's team score must equal Bob's perception of Alice's score
-    // Bob's team score must equal Alice's perception of Bob's score
-    const doesMatch = cap1.score === cap2.opponentScore && cap1.opponentScore === cap2.score;
-
-    setIsVerifying(false);
-
-    if (doesMatch) {
-      setVerificationResult('MATCH');
-      triggerConfettiCelebration();
+    try {
+      const response = await fetch(`/api/tournaments/${activeTournament.id}/verify`, {
+        method: 'POST'
+      });
+      if (!response.ok) throw new Error('Verification request failed');
+      const updatedTournament = await response.json();
       
-      // Update state to Disbursed after a short block confirmation delay
-      setTimeout(() => {
-        setTournaments(prev => prev.map(t => {
-          if (t.id === activeTournament.id) {
-            // Determine winner address
-            let winnerAddr = t.captain1.address;
-            if (t.captain2.score! > t.captain1.score!) {
-              winnerAddr = t.captain2.address;
-            }
-            return {
-              ...t,
-              escrow: {
-                ...t.escrow,
-                status: 'DISBURSED',
-                winnerAddress: winnerAddr
-              }
-            };
-          }
-          return t;
-        }));
+      setIsVerifying(false);
+      const cap1 = updatedTournament.captain1;
+      const cap2 = updatedTournament.captain2;
+      const doesMatch = cap1.score === cap2.opponentScore && cap1.opponentScore === cap2.score;
 
-        // Increment wallet balance of user if they are the winner
+      if (doesMatch) {
+        setVerificationResult('MATCH');
+        triggerConfettiCelebration();
+        
+        // Update local tournaments list
+        setTournaments(prev => prev.map(t => t.id === updatedTournament.id ? updatedTournament : t));
+        // Add to wallet balance
         setWalletBalance(prev => prev + activeTournament.escrow.totalPool);
         
-        // Final congratulations burst
-        triggerConfettiCelebration();
-      }, 3000);
-
-    } else {
-      setVerificationResult('MISMATCH');
-      setTournaments(prev => prev.map(t => {
-        if (t.id === activeTournament.id) {
-          return {
-            ...t,
-            escrow: {
-              ...t.escrow,
-              status: 'DISPUTED'
-            }
-          };
-        }
-        return t;
-      }));
+        setTimeout(() => {
+          triggerConfettiCelebration();
+        }, 1500);
+      } else {
+        setVerificationResult('MISMATCH');
+        setTournaments(prev => prev.map(t => t.id === updatedTournament.id ? updatedTournament : t));
+      }
+    } catch (err: any) {
+      alert(err.message || 'Error executing QVAC audit');
+      setIsVerifying(false);
     }
   };
 
   // Reset/Redo match scores
-  const handleResetScores = () => {
-    setTournaments(prev => prev.map(t => {
-      if (t.id === activeTournament.id) {
-        return {
-          ...t,
-          captain1: { ...t.captain1, score: null, opponentScore: null, signed: false },
-          captain2: { ...t.captain2, score: null, opponentScore: null, signed: false },
-          escrow: { ...t.escrow, status: 'LOCKED', winnerAddress: null }
-        };
-      }
-      return t;
-    }));
-    setCap1MyScore('');
-    setCap1OpScore('');
-    setCap2MyScore('');
-    setCap2OpScore('');
-    setVerificationResult(null);
-    setIsVerifying(false);
-    setDisputeResolved(false);
+  const handleResetScores = async () => {
+    try {
+      const response = await fetch(`/api/tournaments/${activeTournament.id}/reset`, {
+        method: 'POST'
+      });
+      if (!response.ok) throw new Error('Reset request failed');
+      const updatedTournament = await response.json();
+      setTournaments(prev => prev.map(t => t.id === updatedTournament.id ? updatedTournament : t));
+      
+      setCap1MyScore('');
+      setCap1OpScore('');
+      setCap2MyScore('');
+      setCap2OpScore('');
+      setVerificationResult(null);
+      setIsVerifying(false);
+      setDisputeResolved(false);
+      setEvidenceFile(null);
+      setPreviewUrl(null);
+    } catch (err: any) {
+      alert(err.message || 'Error resetting match scores');
+    }
   };
 
   // Override / Emergency Resolution for Demo
-  const forceResolveDispute = () => {
-    setDisputeResolved(true);
-    setVerificationResult('MATCH');
-    triggerConfettiCelebration();
+  const forceResolveDispute = async () => {
+    setIsGeminiArbitrating(true);
+    
+    // Read file if selected and convert to base64
+    let base64Image = null;
+    let fileMimeType = null;
+    
+    if (evidenceFile) {
+      base64Image = await new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.readAsDataURL(evidenceFile);
+      });
+      fileMimeType = evidenceFile.type;
+    }
 
-    setTimeout(() => {
-      setTournaments(prev => prev.map(t => {
-        if (t.id === activeTournament.id) {
-          return {
-            ...t,
-            captain1: { ...t.captain1, score: 2, opponentScore: 1 },
-            captain2: { ...t.captain2, score: 1, opponentScore: 2 },
-            escrow: {
-              ...t.escrow,
-              status: 'DISBURSED',
-              winnerAddress: t.captain1.address
-            }
-          };
-        }
-        return t;
-      }));
-      setWalletBalance(prev => prev + activeTournament.escrow.totalPool);
+    try {
+      const response = await fetch(`/api/tournaments/${activeTournament.id}/resolve-dispute`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          evidenceImage: base64Image,
+          mimeType: fileMimeType
+        })
+      });
+      if (!response.ok) throw new Error('Arbitration request failed');
+      const updatedTournament = await response.json();
+      
+      setTournaments(prev => prev.map(t => t.id === updatedTournament.id ? updatedTournament : t));
+      setDisputeResolved(true);
+      setVerificationResult('MATCH');
       triggerConfettiCelebration();
-    }, 2000);
+
+      setWalletBalance(prev => prev + activeTournament.escrow.totalPool);
+      setTimeout(() => {
+        triggerConfettiCelebration();
+      }, 1500);
+    } catch (err: any) {
+      alert(err.message || 'Error running dispute arbitration');
+    } finally {
+      setIsGeminiArbitrating(false);
+    }
   };
 
   const isBothSigned = activeTournament.captain1.signed && activeTournament.captain2.signed;
@@ -911,7 +925,7 @@ export default function DashboardSection({
               </div>
             )}
 
-            {/* Verification Success (Matched scores) */}
+            {/* Verification Success (Matched scores or Resolved disputes) */}
             {verificationResult === 'MATCH' && (
               <motion.div 
                 initial={{ opacity: 0, scale: 0.98 }}
@@ -922,14 +936,45 @@ export default function DashboardSection({
                 <div className="flex items-center space-x-3 text-emerald-400">
                   <CheckCircle className="w-6 h-6" />
                   <div>
-                    <h4 className="font-display font-extrabold text-sm tracking-wider uppercase">QVAC AUDIT PASSED</h4>
-                    <span className="font-mono text-[9px] uppercase tracking-wider text-zinc-500">Zero-Latency Consensus Reached</span>
+                    <h4 className="font-display font-extrabold text-sm tracking-wider uppercase">
+                      {activeTournament.disputeResolution ? 'QVAC ARBITRATION RESOLVED' : 'QVAC AUDIT PASSED'}
+                    </h4>
+                    <span className="font-mono text-[9px] uppercase tracking-wider text-zinc-500">
+                      {activeTournament.disputeResolution ? 'Dispute settled by Gemini AI' : 'Zero-Latency Consensus Reached'}
+                    </span>
                   </div>
                 </div>
 
                 <p className="text-zinc-300 text-xs leading-relaxed font-sans font-normal">
                   Consensus scoreline confirmed: <strong>{activeTournament.captain1.score} - {activeTournament.captain1.opponentScore}</strong>. Tether WDK Multi-sig has triggered settlement disburse.
                 </p>
+
+                {activeTournament.disputeResolution && (
+                  <div className="p-4 bg-zinc-950/60 border border-zinc-900/60 rounded-xl space-y-3 font-mono text-[10px]">
+                    <div className="flex items-center justify-between border-b border-zinc-900/80 pb-1.5 text-zinc-400">
+                      <span className="text-zinc-500 uppercase tracking-widest text-[9px]">Settlement Method:</span>
+                      <span className="text-sky-400 font-bold">GEMINI WDK AUDITOR</span>
+                    </div>
+                    <div className="flex items-center justify-between text-zinc-400">
+                      <span className="text-zinc-500 uppercase tracking-widest text-[9px]">Decision Confidence:</span>
+                      <span className="text-emerald-400 font-bold">{(activeTournament.disputeResolution.confidence * 100).toFixed(0)}%</span>
+                    </div>
+                    <div className="flex items-center justify-between text-zinc-400">
+                      <span className="text-zinc-500 uppercase tracking-widest text-[9px]">Ground Truth Winner:</span>
+                      <span className="text-white font-bold">{activeTournament.disputeResolution.suggestedWinner}</span>
+                    </div>
+                    {activeTournament.disputeResolution.isSimulated && (
+                      <div className="flex items-center justify-between text-zinc-400">
+                        <span className="text-zinc-500 uppercase tracking-widest text-[9px]">Status:</span>
+                        <span className="text-amber-500 font-bold uppercase">Simulated Fallback</span>
+                      </div>
+                    )}
+                    <div className="pt-2 border-t border-zinc-900/80 text-zinc-300 leading-normal font-sans text-xs">
+                      <span className="block text-[8px] font-mono text-zinc-500 uppercase tracking-widest mb-1">AI Audit Report:</span>
+                      {activeTournament.disputeResolution.geminiAnalysis}
+                    </div>
+                  </div>
+                )}
 
                 {activeTournament.escrow.status === 'DISBURSED' ? (
                   <div className="flex flex-col sm:flex-row items-center justify-between p-4 bg-emerald-950/30 border border-emerald-900/40 rounded-lg gap-4">
@@ -938,9 +983,9 @@ export default function DashboardSection({
                       <div>
                         <span className="block font-mono text-[8px] text-zinc-500 uppercase">Settled Winner</span>
                         <span className="text-xs font-bold">
-                          {activeTournament.captain1.score! > activeTournament.captain1.opponentScore! 
+                          {activeTournament.escrow.winnerAddress === activeTournament.captain1.address 
                             ? activeTournament.captain1.name 
-                            : activeTournament.captain2.name} (100.00 USDT disbursed)
+                            : activeTournament.captain2.name} ({activeTournament.escrow.totalPool}.00 USDT disbursed)
                         </span>
                       </div>
                     </div>
@@ -980,18 +1025,48 @@ export default function DashboardSection({
                   Signers submitted inconsistent match results! Alice submitted <strong>{activeTournament.captain1.score}-{activeTournament.captain1.opponentScore}</strong>, but Bob submitted <strong>{activeTournament.captain2.opponentScore}-{activeTournament.captain2.score}</strong>. Funds are frozen inside the self-custodial escrow contract.
                 </p>
 
+                {/* Evidence Upload Section */}
+                <div className="bg-black/60 border border-zinc-900/80 rounded-xl p-4 space-y-3">
+                  <label className="block font-mono text-[8px] text-zinc-500 uppercase tracking-widest">
+                    Upload Score Screenshot (Match Evidence)
+                  </label>
+                  <input 
+                    type="file" 
+                    accept="image/*"
+                    onChange={handleFileChange}
+                    className="block w-full text-[10px] text-zinc-400 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-[10px] file:font-semibold file:bg-zinc-900 file:text-zinc-300 file:hover:bg-zinc-800 cursor-pointer"
+                  />
+                  {previewUrl && (
+                    <div className="relative mt-2 border border-zinc-900 rounded-lg overflow-hidden max-h-40 bg-zinc-950 flex items-center justify-center">
+                      <img src={previewUrl} alt="Evidence Screenshot" className="max-h-40 object-contain w-auto" />
+                    </div>
+                  )}
+                </div>
+
                 <div className="flex flex-col sm:flex-row gap-3 pt-2">
-                  <button
-                    onClick={forceResolveDispute}
-                    className="flex-1 py-3 bg-red-500 text-black font-display font-extrabold text-[10px] uppercase tracking-wider rounded-lg transition-colors hover:bg-red-400 cursor-pointer"
-                    id="btn-force-arbitrate"
-                  >
-                    Simulate Dispute Arbitration
-                  </button>
+                  {isGeminiArbitrating ? (
+                    <button
+                      disabled
+                      className="flex-1 py-3 bg-zinc-900 text-zinc-500 border border-zinc-800 font-display font-extrabold text-[10px] uppercase tracking-wider rounded-lg flex items-center justify-center space-x-2"
+                    >
+                      <div className="w-3.5 h-3.5 border-2 border-zinc-500 border-t-transparent rounded-full animate-spin"></div>
+                      <span>Gemini AI Auditing Evidence...</span>
+                    </button>
+                  ) : (
+                    <button
+                      onClick={forceResolveDispute}
+                      className="flex-1 py-3 bg-red-500 text-black font-display font-extrabold text-[10px] uppercase tracking-wider rounded-lg transition-colors hover:bg-red-400 cursor-pointer flex items-center justify-center space-x-2"
+                      id="btn-force-arbitrate"
+                    >
+                      <Zap className="w-3.5 h-3.5 fill-black" />
+                      <span>{evidenceFile ? 'Arbitrate via Gemini AI' : 'Simulate Dispute Arbitration'}</span>
+                    </button>
+                  )}
                   
                   <button
                     onClick={handleResetScores}
-                    className="flex-1 py-3 bg-zinc-900 border border-zinc-800 text-zinc-300 hover:text-white font-display font-bold text-[10px] uppercase tracking-wider rounded-lg transition-colors cursor-pointer"
+                    disabled={isGeminiArbitrating}
+                    className="flex-1 py-3 bg-zinc-900 border border-zinc-800 text-zinc-300 hover:text-white font-display font-bold text-[10px] uppercase tracking-wider rounded-lg transition-colors cursor-pointer disabled:opacity-50"
                     id="btn-reset-dispute"
                   >
                     Re-submit Scores

@@ -18,40 +18,24 @@ export default function App() {
   const [walletBalance, setWalletBalance] = useState<number>(1250);
   const walletAddress = '0x71C8A6e25501CEBa2E42c1936eB60D74a5f8E43E';
 
-  // Pre-populate with an active demo tournament so they can play right away
-  const [tournaments, setTournaments] = useState<Tournament[]>([
-    {
-      id: 'demo-tether',
-      name: 'Tether Developers Cup',
-      code: 'TETHER-DEV',
-      captain1: {
-        name: 'Captain Alice',
-        address: '0x7A14b98F8641EbA82F2C55dB600D74a5f8E43E9D',
-        score: null,
-        opponentScore: null,
-        signed: false,
-      },
-      captain2: {
-        name: 'Captain Bob',
-        address: '0x3B99c15Ad41E4790CE936171510C1B824f2F4186',
-        score: null,
-        opponentScore: null,
-        signed: false,
-      },
-      escrow: {
-        contractAddress: '0x8Fb4726c5df962da42e3a53e48102381bc5ef3ea',
-        entryFee: 50,
-        totalPool: 100,
-        currency: 'USDT',
-        status: 'LOCKED',
-        winnerAddress: null,
-        txHash: '0x7e1a384f67c29548483b5190a6e0c609c0f99bc7b2b07e774c8bc23cf9e9c32f',
-      },
-      createdAt: '2026-07-07, 08:00:00 AM',
-    }
-  ]);
+  const [tournaments, setTournaments] = useState<Tournament[]>([]);
+  const [activeTournamentId, setActiveTournamentId] = useState<string | null>(null);
 
-  const [activeTournamentId, setActiveTournamentId] = useState<string | null>('demo-tether');
+  // Load tournaments from server on mount
+  React.useEffect(() => {
+    fetch('/api/tournaments')
+      .then(res => {
+        if (!res.ok) throw new Error('Failed to load tournaments');
+        return res.json();
+      })
+      .then(data => {
+        setTournaments(data);
+        if (data.length > 0) {
+          setActiveTournamentId(data[0].id);
+        }
+      })
+      .catch(err => console.error('Error loading tournaments:', err));
+  }, []);
 
   // Callback for when tournament is created
   const handleCreateSuccess = (newTournament: Tournament) => {
@@ -61,33 +45,13 @@ export default function App() {
   };
 
   // Callback for when user joins an escrow successfully
-  const handleJoinSuccess = (tournamentCode: string, captainIndex: 1 | 2) => {
-    const codeUpper = tournamentCode.trim().toUpperCase();
-    setTournaments(prev => prev.map(t => {
-      if (t.code === codeUpper) {
-        // Subtract entry fee from user's balance
-        setWalletBalance(b => b - t.escrow.entryFee);
-        
-        // Mark joining captain as signed/joined
-        if (captainIndex === 1) {
-          return {
-            ...t,
-            captain1: { ...t.captain1, signed: true }
-          };
-        } else {
-          return {
-            ...t,
-            captain2: { ...t.captain2, signed: true }
-          };
-        }
-      }
-      return t;
-    }));
-
-    const found = tournaments.find(t => t.code === codeUpper);
-    if (found) {
-      setActiveTournamentId(found.id);
-    }
+  const handleJoinSuccess = (updatedTournament: Tournament) => {
+    // Subtract entry fee from user's balance
+    setWalletBalance(b => b - updatedTournament.escrow.entryFee);
+    
+    // Update local tournaments list
+    setTournaments(prev => prev.map(t => t.id === updatedTournament.id ? updatedTournament : t));
+    setActiveTournamentId(updatedTournament.id);
     setActiveTab('dashboard');
   };
 

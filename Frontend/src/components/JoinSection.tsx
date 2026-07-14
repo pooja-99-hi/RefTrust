@@ -15,7 +15,7 @@ import { Tournament } from '../types';
 
 interface JoinSectionProps {
   tournaments: Tournament[];
-  onJoinSuccess: (tournamentCode: string, captainIndex: 1 | 2) => void;
+  onJoinSuccess: (updatedTournament: Tournament) => void;
   walletConnected: boolean;
   onConnectWallet: () => void;
   walletBalance: number;
@@ -34,18 +34,21 @@ export default function JoinSection({
   const [isDepositing, setIsDepositing] = useState(false);
   const [depositSuccess, setDepositSuccess] = useState(false);
 
-  const handleSearch = (e: React.FormEvent) => {
+  const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
     setSearchedTournament(null);
 
     const codeUpper = code.trim().toUpperCase();
-    const found = tournaments.find(t => t.code === codeUpper);
-    
-    if (found) {
-      setSearchedTournament(found);
-    } else {
-      setErrorMsg(`No active tournament escrow found for code "${codeUpper}". Make sure you typed it correctly or create one first!`);
+    try {
+      const res = await fetch(`/api/tournaments/${codeUpper}`);
+      if (!res.ok) {
+        throw new Error(`No active tournament escrow found for code "${codeUpper}". Make sure you typed it correctly or create one first!`);
+      }
+      const data = await res.json();
+      setSearchedTournament(data);
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Error searching for tournament');
     }
   };
 
@@ -64,16 +67,26 @@ export default function JoinSection({
     }
 
     setIsDepositing(true);
-    await new Promise(resolve => setTimeout(resolve, 2000)); // Simulate deposit tx
-    
-    setIsDepositing(false);
-    setDepositSuccess(true);
-    
-    // Default to Captain 1 joining if neither is signed, or whichever is remaining
-    const isCap1Signed = searchedTournament.captain1.signed;
-    const targetCaptain: 1 | 2 = isCap1Signed ? 2 : 1;
-    
-    onJoinSuccess(searchedTournament.code, targetCaptain);
+    try {
+      const isCap1Signed = searchedTournament.captain1.signed;
+      const targetCaptain: 1 | 2 = isCap1Signed ? 2 : 1;
+      
+      const response = await fetch(`/api/tournaments/${searchedTournament.id}/join`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ captainIndex: targetCaptain })
+      });
+      
+      if (!response.ok) throw new Error('Failed to authorize entry fee deposit');
+      const updatedTournament = await response.json();
+      
+      setIsDepositing(false);
+      setDepositSuccess(true);
+      setSearchedTournament(updatedTournament);
+    } catch (err: any) {
+      alert(err.message || 'Error processing deposit');
+      setIsDepositing(false);
+    }
   };
 
   return (
@@ -218,7 +231,7 @@ export default function JoinSection({
               </div>
 
               <button
-                onClick={() => onJoinSuccess(searchedTournament!.code, 1)}
+                onClick={() => onJoinSuccess(searchedTournament!)}
                 className="w-full py-4 rounded-lg bg-sky-400 text-black font-display font-extrabold text-xs tracking-wider uppercase shadow-[0_0_20px_rgba(14,165,233,0.15)] hover:bg-sky-300 transition-colors cursor-pointer flex items-center justify-center space-x-2"
                 id="btn-join-success-dashboard"
               >

@@ -15,11 +15,43 @@ import { Tournament } from './types';
 export default function App() {
   const [activeTab, setActiveTab] = useState<'home' | 'create' | 'join' | 'dashboard'>('home');
   const [walletConnected, setWalletConnected] = useState<boolean>(false);
+  const [walletAddress, setWalletAddress] = useState<string>('');
   const [walletBalance, setWalletBalance] = useState<number>(1250);
-  const walletAddress = '0x71C8A6e25501CEBa2E42c1936eB60D74a5f8E43E';
 
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
   const [activeTournamentId, setActiveTournamentId] = useState<string | null>(null);
+
+  // Check if MetaMask is already connected and setup listener
+  React.useEffect(() => {
+    if (typeof window !== 'undefined' && (window as any).ethereum) {
+      (window as any).ethereum.request({ method: 'eth_accounts' })
+        .then((accounts: string[]) => {
+          if (accounts && accounts.length > 0) {
+            setWalletAddress(accounts[0]);
+            setWalletConnected(true);
+          }
+        })
+        .catch((err: any) => console.error('Error checking MetaMask accounts:', err));
+
+      const handleAccountsChanged = (accounts: string[]) => {
+        if (accounts.length === 0) {
+          setWalletConnected(false);
+          setWalletAddress('');
+        } else {
+          setWalletAddress(accounts[0]);
+          setWalletConnected(true);
+        }
+      };
+
+      (window as any).ethereum.on('accountsChanged', handleAccountsChanged);
+
+      return () => {
+        if ((window as any).ethereum.removeListener) {
+          (window as any).ethereum.removeListener('accountsChanged', handleAccountsChanged);
+        }
+      };
+    }
+  }, []);
 
   // Load tournaments from server on mount
   React.useEffect(() => {
@@ -55,8 +87,28 @@ export default function App() {
     setActiveTab('dashboard');
   };
 
-  const handleConnectWallet = () => {
-    setWalletConnected(true);
+  const handleConnectWallet = async () => {
+    if (typeof window !== 'undefined' && (window as any).ethereum) {
+      try {
+        const accounts = await (window as any).ethereum.request({ method: 'eth_requestAccounts' });
+        if (accounts && accounts.length > 0) {
+          setWalletAddress(accounts[0]);
+          setWalletConnected(true);
+        }
+      } catch (err: any) {
+        console.error('MetaMask connection failed:', err);
+        alert(err.message || 'MetaMask connection rejected');
+      }
+    } else {
+      alert('MetaMask is not installed. Please install MetaMask to use this feature!');
+      window.open('https://metamask.io/download/', '_blank');
+    }
+  };
+
+  const handleDisconnectWallet = () => {
+    setWalletConnected(false);
+    setWalletAddress('');
+    setWalletBalance(1250); // reset to mock test value
   };
 
   return (
@@ -113,7 +165,8 @@ export default function App() {
           activeTab={activeTab}
           setActiveTab={setActiveTab}
           walletConnected={walletConnected}
-          setWalletConnected={setWalletConnected}
+          onConnectWallet={handleConnectWallet}
+          onDisconnectWallet={handleDisconnectWallet}
           walletAddress={walletAddress}
           walletBalance={walletBalance}
         />

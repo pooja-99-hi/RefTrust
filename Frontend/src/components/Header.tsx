@@ -6,7 +6,8 @@ interface HeaderProps {
   activeTab: 'home' | 'create' | 'join' | 'dashboard';
   setActiveTab: (tab: 'home' | 'create' | 'join' | 'dashboard') => void;
   walletConnected: boolean;
-  setWalletConnected: (connected: boolean) => void;
+  onConnectWallet: () => void;
+  onDisconnectWallet: () => void;
   walletAddress: string;
   walletBalance: number;
 }
@@ -15,13 +16,11 @@ export default function Header({
   activeTab,
   setActiveTab,
   walletConnected,
-  setWalletConnected,
+  onConnectWallet,
+  onDisconnectWallet,
   walletAddress,
   walletBalance,
 }: HeaderProps) {
-  const toggleWallet = () => {
-    setWalletConnected(!walletConnected);
-  };
 
   return (
     <header className="border-b border-zinc-900 bg-black/80 backdrop-blur-md sticky top-0 z-50">
@@ -92,7 +91,7 @@ export default function Header({
                 </span>
               </div>
               <button
-                onClick={toggleWallet}
+                onClick={onDisconnectWallet}
                 className="flex items-center space-x-2 px-3 py-1.5 sm:px-4 sm:py-2 rounded-full border border-emerald-500/30 bg-emerald-950/20 text-emerald-400 hover:bg-emerald-950/40 transition-colors text-xs font-medium"
                 id="wallet-connected-btn"
               >
@@ -102,7 +101,7 @@ export default function Header({
             </div>
           ) : (
             <button
-              onClick={toggleWallet}
+              onClick={onConnectWallet}
               className="group relative flex items-center space-x-2 px-4 py-2 sm:px-5 sm:py-2.5 rounded-full border border-sky-500/30 bg-zinc-950 hover:bg-sky-950/10 hover:border-sky-400 transition-all text-xs font-bold text-sky-400 tracking-wider shadow-[0_0_15px_rgba(14,165,233,0.03)] hover:shadow-[0_0_20px_rgba(14,165,233,0.15)] cursor-pointer"
               id="wallet-connect-btn"
             >

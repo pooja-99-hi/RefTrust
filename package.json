@@ -1,0 +1,13 @@
+{
+  "name": "reftrust-root",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Root workspace proxy for RefTrust Escrow",
+  "scripts": {
+    "dev": "npm run dev --prefix Frontend",
+    "build": "npm run build --prefix Frontend",
+    "clean": "npm run clean --prefix Frontend",
+    "lint": "npm run lint --prefix Frontend",
+    "install:frontend": "npm install --prefix Frontend"
+  }
+}
